@@ -25,3 +25,7 @@ export interface StockDataPoint {
   price: number;
   isPrediction?: boolean;
 }
+export interface PredictionRequest {
+  ticker: string;
+  days: number;
+}

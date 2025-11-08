@@ -11,44 +11,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { StockChart } from '@/components/StockChart';
 import { StockDataPoint } from '@shared/types';
 import { toast } from 'sonner';
-import { addDays, format } from 'date-fns';
-// Mock API function to simulate backend response
-const mockFetchStockPrediction = (ticker: string, days: number): Promise<StockDataPoint[]> => {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (!ticker || ticker.toUpperCase() === 'FAIL') {
-        reject(new Error(`Invalid ticker symbol: ${ticker}`));
-        return;
-      }
-      const today = new Date();
-      const data: StockDataPoint[] = [];
-      let lastPrice = Math.random() * 500 + 100;
-      // Generate 90 days of historical data
-      for (let i = 90; i > 0; i--) {
-        const date = addDays(today, -i);
-        lastPrice += (Math.random() - 0.5) * 10;
-        lastPrice = Math.max(lastPrice, 10); // Ensure price doesn't go below 10
-        data.push({
-          date: format(date, 'MMM dd'),
-          price: lastPrice,
-          isPrediction: false,
-        });
-      }
-      // Generate prediction data
-      for (let i = 1; i <= days; i++) {
-        const date = addDays(today, i);
-        lastPrice += (Math.random() - 0.45) * 10; // Slight upward trend
-        lastPrice = Math.max(lastPrice, 10);
-        data.push({
-          date: format(date, 'MMM dd'),
-          price: lastPrice,
-          isPrediction: true,
-        });
-      }
-      resolve(data);
-    }, 1500);
-  });
-};
+import { api } from '@/lib/api-client';
 export function HomePage() {
   const [ticker, setTicker] = useState('AAPL');
   const [days, setDays] = useState('30');
@@ -64,7 +27,13 @@ export function HomePage() {
     setError(null);
     setChartData(null);
     try {
-      const data = await mockFetchStockPrediction(ticker, parseInt(days, 10));
+      const data = await api<StockDataPoint[]>('/api/predict', {
+        method: 'POST',
+        body: JSON.stringify({
+          ticker: ticker,
+          days: parseInt(days, 10),
+        }),
+      });
       setChartData(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
@@ -212,7 +181,7 @@ export function HomePage() {
             </div>
           </main>
           <footer className="text-center mt-16 text-muted-foreground text-sm">
-            <p>Built with ��️ at Cloudflare</p>
+            <p>Built with ❤�� at Cloudflare</p>
           </footer>
         </div>
       </div>
