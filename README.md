@@ -1,6 +1,6 @@
 # FinCast: AI Stock Predictor
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sattvadev/fincast-ai-stock-predictor)
 
 > A minimalist and visually stunning web interface to predict and visualize future stock prices using an AI-powered API.
 
@@ -91,7 +91,7 @@ Wrangler will handle the entire process of building the frontend assets, bundlin
 
 Alternatively, you can deploy directly from your GitHub repository with one click:
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/sattvadev/fincast-ai-stock-predictor)
 
 ## ⚠️ Disclaimer
 
