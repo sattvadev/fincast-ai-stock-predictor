@@ -1,148 +1,221 @@
-// Home page of the app, Currently a demo page for demonstration.
-// Please rewrite this file to implement your own logic. Do not replace or delete it, simply rewrite this HomePage.tsx file.
-import { useEffect } from 'react'
-import { Sparkles } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { Toaster, toast } from '@/components/ui/sonner'
-import { create } from 'zustand'
-import { useShallow } from 'zustand/react/shallow'
-import { AppLayout } from '@/components/layout/AppLayout'
-
-// Timer store: independent slice with a clear, minimal API, for demonstration
-type TimerState = {
-  isRunning: boolean;
-  elapsedMs: number;
-  start: () => void;
-  pause: () => void;
-  reset: () => void;
-  tick: (deltaMs: number) => void;
-}
-
-const useTimerStore = create<TimerState>((set) => ({
-  isRunning: false,
-  elapsedMs: 0,
-  start: () => set({ isRunning: true }),
-  pause: () => set({ isRunning: false }),
-  reset: () => set({ elapsedMs: 0, isRunning: false }),
-  tick: (deltaMs) => set((s) => ({ elapsedMs: s.elapsedMs + deltaMs })),
-}))
-
-// Counter store: separate slice to showcase multiple stores without coupling
-type CounterState = {
-  count: number;
-  inc: () => void;
-  reset: () => void;
-}
-
-const useCounterStore = create<CounterState>((set) => ({
-  count: 0,
-  inc: () => set((s) => ({ count: s.count + 1 })),
-  reset: () => set({ count: 0 }),
-}))
-
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
+import React, { useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import { LineChart as LineChartIcon, Search, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { StockChart } from '@/components/StockChart';
+import { StockDataPoint } from '@shared/types';
+import { toast } from 'sonner';
+import { addDays, format } from 'date-fns';
+// Mock API function to simulate backend response
+const mockFetchStockPrediction = (ticker: string, days: number): Promise<StockDataPoint[]> => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (!ticker || ticker.toUpperCase() === 'FAIL') {
+        reject(new Error(`Invalid ticker symbol: ${ticker}`));
+        return;
+      }
+      const today = new Date();
+      const data: StockDataPoint[] = [];
+      let lastPrice = Math.random() * 500 + 100;
+      // Generate 90 days of historical data
+      for (let i = 90; i > 0; i--) {
+        const date = addDays(today, -i);
+        lastPrice += (Math.random() - 0.5) * 10;
+        lastPrice = Math.max(lastPrice, 10); // Ensure price doesn't go below 10
+        data.push({
+          date: format(date, 'MMM dd'),
+          price: lastPrice,
+          isPrediction: false,
+        });
+      }
+      // Generate prediction data
+      for (let i = 1; i <= days; i++) {
+        const date = addDays(today, i);
+        lastPrice += (Math.random() - 0.45) * 10; // Slight upward trend
+        lastPrice = Math.max(lastPrice, 10);
+        data.push({
+          date: format(date, 'MMM dd'),
+          price: lastPrice,
+          isPrediction: true,
+        });
+      }
+      resolve(data);
+    }, 1500);
+  });
+};
 export function HomePage() {
-  // Select only what is needed to avoid unnecessary re-renders
-  const { isRunning, elapsedMs } = useTimerStore(
-    useShallow((s) => ({ isRunning: s.isRunning, elapsedMs: s.elapsedMs })),
-  )
-  const start = useTimerStore((s) => s.start)
-  const pause = useTimerStore((s) => s.pause)
-  const resetTimer = useTimerStore((s) => s.reset)
-  const count = useCounterStore((s) => s.count)
-  const inc = useCounterStore((s) => s.inc)
-  const resetCount = useCounterStore((s) => s.reset)
-
-  // Drive the timer only while running; avoid update-depth issues with a scoped RAF
-  useEffect(() => {
-    if (!isRunning) return
-    let raf = 0
-    let last = performance.now()
-    const loop = () => {
-      const now = performance.now()
-      const delta = now - last
-      last = now
-      // Read store API directly to keep effect deps minimal and stable
-      useTimerStore.getState().tick(delta)
-      raf = requestAnimationFrame(loop)
+  const [ticker, setTicker] = useState('AAPL');
+  const [days, setDays] = useState('30');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [chartData, setChartData] = useState<StockDataPoint[] | null>(null);
+  const handlePredict = useCallback(async () => {
+    if (!ticker) {
+      toast.error('Please enter a stock ticker.');
+      return;
     }
-    raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
-  }, [isRunning])
-
-  const onPleaseWait = () => {
-    inc()
-    if (!isRunning) {
-      start()
-      toast.success('Building your app…', {
-        description: 'Hang tight, we\'re setting everything up.',
-      })
-    } else {
-      pause()
-      toast.info('Taking a short pause', {
-        description: 'We\'ll continue shortly.',
-      })
+    setIsLoading(true);
+    setError(null);
+    setChartData(null);
+    try {
+      const data = await mockFetchStockPrediction(ticker, parseInt(days, 10));
+      setChartData(data);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
-  }
-
-  const formatted = formatDuration(elapsedMs)
-
-  return (
-    <AppLayout>
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4 overflow-hidden relative">
-        <ThemeToggle />
-        <div className="absolute inset-0 bg-gradient-rainbow opacity-10 dark:opacity-20 pointer-events-none" />
-        <div className="text-center space-y-8 relative z-10 animate-fade-in">
-          <div className="flex justify-center">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-primary floating">
-              <Sparkles className="w-8 h-8 text-white rotating" />
-            </div>
-          </div>
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-balance leading-tight">
-            Creating your <span className="text-gradient">app</span>
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto text-pretty">
-            Your application would be ready soon.
-          </p>
-          <div className="flex justify-center gap-4">
-            <Button 
-              size="lg"
-              onClick={onPleaseWait}
-              className="btn-gradient px-8 py-4 text-lg font-semibold hover:-translate-y-0.5 transition-all duration-200"
-              aria-live="polite"
-            >
-              Please Wait
-            </Button>
-          </div>
-          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-            <div>
-              Time elapsed: <span className="font-medium tabular-nums text-foreground">{formatted}</span>
-            </div>
-            <div>
-              Coins: <span className="font-medium tabular-nums text-foreground">{count}</span>
-            </div>
-          </div>
-          <div className="flex justify-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => { resetTimer(); resetCount(); toast('Reset complete') }}>
-              Reset
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => { inc(); toast('Coin added') }}>
-              Add Coin
-            </Button>
-          </div>
+  }, [ticker, days]);
+  const ChartState = () => {
+    if (isLoading) {
+      return (
+        <div className="space-y-4 p-4">
+          <Skeleton className="h-8 w-3/4" />
+          <Skeleton className="h-[350px] w-full" />
         </div>
-        <footer className="absolute bottom-8 text-center text-muted-foreground/80">
-          <p>Powered by Cloudflare</p>
-        </footer>
-        <Toaster richColors closeButton />
+      );
+    }
+    if (error && !chartData) {
+      return (
+        <div className="flex flex-col items-center justify-center h-[400px] text-center">
+          <AlertTriangle className="w-16 h-16 text-destructive mb-4" />
+          <h3 className="text-xl font-semibold text-destructive">Prediction Failed</h3>
+          <p className="text-muted-foreground mt-2">{error}</p>
+        </div>
+      );
+    }
+    if (chartData) {
+      return <StockChart data={chartData} />;
+    }
+    return (
+      <div className="flex flex-col items-center justify-center h-[400px] text-center">
+        <TrendingUp className="w-16 h-16 text-muted-foreground mb-4" />
+        <h3 className="text-xl font-semibold">Ready to Predict</h3>
+        <p className="text-muted-foreground mt-2">Enter a stock ticker and select a timeframe to see the future.</p>
       </div>
-    </AppLayout>
-  )
+    );
+  };
+  return (
+    <div className="min-h-screen w-full bg-background text-foreground relative overflow-hidden">
+      <div className="absolute inset-0 -z-10 h-full w-full bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] dark:bg-black dark:bg-[radial-gradient(#ffffff20_1px,transparent_1px)]"></div>
+      <ThemeToggle className="absolute top-6 right-6" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="py-16 md:py-24">
+          <header className="text-center space-y-4">
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="inline-block"
+            >
+              <h1 className="text-4xl md:text-6xl font-display font-bold text-foreground">
+                FinCast
+              </h1>
+            </motion.div>
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto"
+            >
+              A minimalist and visually stunning web interface to predict and visualize future stock prices using an AI-powered API.
+            </motion.p>
+          </header>
+          <main className="mt-12 md:mt-16">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.6, delay: 0.4 }}
+                className="lg:col-span-1"
+              >
+                <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <LineChartIcon className="w-6 h-6 text-primary" />
+                      <span>Prediction Parameters</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Enter a stock ticker and select the prediction timeframe.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="ticker">Stock Ticker</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                        <Input
+                          id="ticker"
+                          placeholder="e.g., AAPL, GOOGL"
+                          value={ticker}
+                          onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="days">Prediction Timeframe</Label>
+                      <Select value={days} onValueChange={setDays}>
+                        <SelectTrigger id="days">
+                          <SelectValue placeholder="Select days" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="7">7 Days</SelectItem>
+                          <SelectItem value="14">14 Days</SelectItem>
+                          <SelectItem value="30">30 Days</SelectItem>
+                          <SelectItem value="90">90 Days</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="flex-col items-stretch space-y-4">
+                    <Button onClick={handlePredict} disabled={isLoading} size="lg">
+                      {isLoading ? (
+                        <>
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                            className="w-4 h-4 border-2 border-background border-t-transparent rounded-full mr-2"
+                          />
+                          Predicting...
+                        </>
+                      ) : (
+                        'Predict Price'
+                      )}
+                    </Button>
+                     <p className="text-xs text-muted-foreground text-center px-4">
+                      Disclaimer: Predictions are for informational purposes only and are not financial advice.
+                    </p>
+                  </CardFooter>
+                </Card>
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.6 }}
+                className="lg:col-span-2"
+              >
+                <Card className="shadow-lg min-h-[485px]">
+                  <CardContent className="p-2 sm:p-4">
+                    <ChartState />
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </div>
+          </main>
+          <footer className="text-center mt-16 text-muted-foreground text-sm">
+            <p>Built with ��️ at Cloudflare</p>
+          </footer>
+        </div>
+      </div>
+    </div>
+  );
 }
